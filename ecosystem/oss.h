@@ -54,7 +54,7 @@ struct ClientOptions {
   uint64_t retry_base_interval_us = 100'000;
 };
 
-struct ObjectMeta {
+struct OptionalFieldBase {
   uint8_t flags = 0;
 
   void reset() { flags = 0; }
@@ -75,7 +75,9 @@ struct ObjectMeta {
     name = {};                                                   \
     flags &= ~(flag);                                            \
   }
+};
 
+struct ObjectMeta : public OptionalFieldBase {
   DEFINE_OPTIONAL_FIELD(size_t, size, 1)
   DEFINE_OPTIONAL_FIELD(time_t, mtime, 1 << 1)
   DEFINE_OPTIONAL_FIELD(std::string, etag, 1 << 2)
@@ -85,6 +87,10 @@ struct ObjectMeta {
 struct ObjectHeaderMeta : public ObjectMeta {
   DEFINE_OPTIONAL_FIELD(std::string, storage_class, 1 << 4)
   DEFINE_OPTIONAL_FIELD(uint64_t, crc64, 1 << 5)
+};
+
+struct ObjectUploadResponse : public OptionalFieldBase {
+  DEFINE_OPTIONAL_FIELD(std::string, etag, 1)
 
 #undef DEFINE_OPTIONAL_FIELD
 };
@@ -155,20 +161,14 @@ class Client : public Object {
                                    off_t offset,
                                    ObjectHeaderMeta* meta = nullptr) = 0;
 
-  // return value is the object count which data is successfully downloaded.
-  // It's possible only some objects get to be downloaded successfully.
-  // return -1 if some other errors happen.
-  // The batch_get_objects interface works only when whitelisting enabled 
-  // at OSS server side.
-  virtual int batch_get_objects(std::vector<GetObjectParameters>& params) = 0;
-
   // return value is the object size if the operation succeeds, otherwise
   // return -1.
   // if expected_crc64 is specified, we will compare the value with the
   // returned object crc64 to validate the object integrity.
   virtual ssize_t put_object(std::string_view object, const struct iovec* iov,
                              int iovcnt,
-                             uint64_t* expected_crc64 = nullptr) = 0;
+                             uint64_t* expected_crc64 = nullptr,
+                             ObjectUploadResponse* resp = nullptr) = 0;
 
   // return value is the newly appended size if the operation succeeds,
   // otherwise return -1.
@@ -177,7 +177,8 @@ class Client : public Object {
   virtual ssize_t append_object(std::string_view object,
                                 const struct iovec* iov, int iovcnt,
                                 off_t position,
-                                uint64_t* expected_crc64 = nullptr) = 0;
+                                uint64_t* expected_crc64 = nullptr,
+                                ObjectUploadResponse* resp = nullptr) = 0;
 
   virtual int copy_object(std::string_view src_object,
                           std::string_view dst_object, bool overwrite = false,
@@ -200,7 +201,8 @@ class Client : public Object {
   // if expected_crc64 is specified, we will compare the value with the
   // returned object crc64 to validate the object integrity.
   virtual int complete_multipart_upload(void* context,
-                                        uint64_t* expected_crc64) = 0;
+                                        uint64_t* expected_crc64 = nullptr,
+                                        ObjectUploadResponse* resp = nullptr) = 0;
 
   virtual int abort_multipart_upload(void* context) = 0;
 
