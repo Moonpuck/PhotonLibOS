@@ -1272,6 +1272,63 @@ TEST(http_server, forward_proxy_close_delimited) {
     EXPECT_EQ(g_close_delim_payload, out);
 }
 
+// resolve_filter: the client forwards the filter down to the resolver/socket
+// layer; rejected addresses are discarded.
+static std::vector<IPAddr> g_resolve_filter_seen;
+static bool resolve_filter_accept_all(void*, IPAddr addr) {
+    g_resolve_filter_seen.push_back(addr);
+    return true;
+}
+static bool resolve_filter_reject_all(void*, IPAddr addr) {
+    g_resolve_filter_seen.push_back(addr);
+    return false;
+}
+
+TEST(http_client, resolve_filter) {
+    auto tcpserver = new_tcp_socket_server();
+    DEFER(delete tcpserver);
+    tcpserver->bind_v4localhost();
+    tcpserver->listen();
+    auto server = new_http_server();
+    DEFER(delete server);
+    server->add_handler(new SimpleHandler, true, "/simple-api");
+    tcpserver->set_handler(server->get_connection_handler());
+    tcpserver->start_loop();
+
+    // Use the numeric loopback host so this test owns a dedicated DNS cache
+    // entry, independent of other tests resolving "localhost".
+    auto target = estring().appends("http://127.0.0.1:",
+                                    tcpserver->getsockname().port, "/simple-api");
+
+    // Phase 1: rejecting every address fails resolution, so the request can
+    // never connect. Rejected results are not cached, so phase 2 re-resolves.
+    {
+        auto client = new_http_client();
+        DEFER(delete client);
+        client->set_resolve_filter({nullptr, &resolve_filter_reject_all});
+        g_resolve_filter_seen.clear();
+        Client::OperationOnStack<> op(client, Verb::GET, target);
+        op.retry = 0;
+        int ret = op.call();
+        EXPECT_NE(0, ret);
+        EXPECT_EQ(-1, op.status_code);
+        EXPECT_FALSE(g_resolve_filter_seen.empty());
+    }
+
+    // Phase 2: accepting addresses lets the request succeed.
+    {
+        auto client = new_http_client();
+        DEFER(delete client);
+        client->set_resolve_filter({nullptr, &resolve_filter_accept_all});
+        g_resolve_filter_seen.clear();
+        Client::OperationOnStack<> op(client, Verb::GET, target);
+        int ret = op.call();
+        EXPECT_EQ(0, ret);
+        EXPECT_EQ(200, op.resp.status_code());
+        EXPECT_FALSE(g_resolve_filter_seen.empty());
+    }
+}
+
 int main(int argc, char** arg) {
     if (photon::init(photon::INIT_EVENT_DEFAULT, photon::INIT_IO_NONE))
         return -1;

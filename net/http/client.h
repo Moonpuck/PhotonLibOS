@@ -21,6 +21,7 @@ limitations under the License.
 #include <photon/net/http/message.h>
 #include <photon/net/http/url.h>
 #include <photon/common/object.h>
+#include <photon/common/callback.h>
 #include <photon/common/string_view.h>
 #include <photon/common/stream.h>
 #include <photon/common/timeout.h>
@@ -167,6 +168,12 @@ public:
     void set_bind_ips(std::vector<IPAddr> &ips) {
         m_bind_ips = ips;
     }
+    // Filter applied to DNS-resolved addresses before connecting; an address is
+    // dropped when it returns false. Empty (default) accepts all. Must stay
+    // valid for the lifetime of this client.
+    void set_resolve_filter(Delegate<bool, IPAddr> filter) {
+        m_resolve_filter = filter;
+    }
     StoredURL* get_proxy() {
         return &m_proxy_url;
     }
@@ -202,6 +209,7 @@ protected:
     uint64_t m_timeout = -1ULL;
     bool m_proxy = false;
     std::vector<IPAddr> m_bind_ips;
+    Delegate<bool, IPAddr> m_resolve_filter;
 };
 
 // Create an HTTP client. Without cookie_jar, "Set-Cookies" headers are ignored.

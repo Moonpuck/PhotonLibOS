@@ -446,6 +446,15 @@ class OssClientImpl : public Client {
 
 #define OssClient OssClientImpl
 
+// Resolve filters enforcing ClientOptions::ip_version. The leading void* is
+// the Delegate object slot, bound to nullptr.
+static bool oss_resolve_filter_ipv4(void*, photon::net::IPAddr addr) {
+  return addr.is_ipv4();
+}
+static bool oss_resolve_filter_ipv6(void*, photon::net::IPAddr addr) {
+  return addr.is_ipv6();
+}
+
 OssClient::OssClient(const ClientOptions& options, Authenticator* authenticator)
     : m_bucket(options.bucket),
       m_oss_options(options),
@@ -465,6 +474,18 @@ OssClient::OssClient(const ClientOptions& options, Authenticator* authenticator)
   m_client->timeout(m_oss_options.request_timeout_us);
   m_client->set_user_agent(m_oss_options.user_agent);
   if (!m_oss_options.proxy.empty()) m_client->set_proxy(m_oss_options.proxy);
+
+  switch (m_oss_options.ip_version) {
+    case IPVersion::kIPv4Only:
+      m_client->set_resolve_filter({nullptr, &oss_resolve_filter_ipv4});
+      break;
+    case IPVersion::kIPv6Only:
+      m_client->set_resolve_filter({nullptr, &oss_resolve_filter_ipv6});
+      break;
+    case IPVersion::kBoth:
+    default:
+      break;
+  }
 
   auto& ch = m_oss_options.custom_headers;
   for (auto it = ch.begin(); it != ch.end();) {
