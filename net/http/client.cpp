@@ -189,7 +189,7 @@ public:
     }
 
     IDialer* make_dialer() {   // on the current vCPU, for this client
-        return new_http_dialer(m_tls_ctx, m_bind_ips);
+        return new_http_dialer(m_tls_ctx, m_bind_ips, m_max_idle_timeout);
     }
 
     IDialer* acquire_dialer() {

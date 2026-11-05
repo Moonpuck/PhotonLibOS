@@ -194,7 +194,12 @@ public:
     join_handle* collector = thread_enable_join(
         thread_create11(&TCPSocketPool::collect, this));
 
-    TCPSocketPool(const SocketPoolArgs& args) : args(args) { }
+    TCPSocketPool(const SocketPoolArgs& args) : args(args) {
+        // a zero expiration would give collect() a zero interval and trip
+        // assert(near_expire.expiration() > now); treat it as "never expires"
+        if (this->args.expiration == 0)
+            this->args.expiration = -1ULL;
+    }
 
     ~TCPSocketPool() override {
         auto th = collector;

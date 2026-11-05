@@ -195,6 +195,14 @@ public:
     void timeout_ms(uint64_t tmo) { timeout(tmo * 1000ULL); }
     void timeout_s(uint64_t tmo) { timeout(tmo * 1000ULL * 1000ULL); }
 
+    // Max idle time in microseconds before a pooled connection is closed.
+    // -1ULL (default) keeps idle connections until the peer closes them; 0 is
+    // treated as -1ULL. Captured by each vCPU's built-in dialer on its first
+    // dial; later changes do not update an existing dialer. No effect on a
+    // dialer set by set_dialer().
+    void set_max_idle_timeout(uint64_t timeout_us) { m_max_idle_timeout = timeout_us; }
+    uint64_t max_idle_timeout() const { return m_max_idle_timeout; }
+
     // Inject a dialer to take over connection establishment (and pooling, if
     // any), replacing the built-in per-vCPU pooled dialer. Not owned; must
     // outlive the client, and must be safe for concurrent use across vCPUs.
@@ -239,6 +247,7 @@ protected:
     ProxyAuthenticator m_proxy_authenticator;
     std::string m_user_agent;
     uint64_t m_timeout = -1ULL;
+    uint64_t m_max_idle_timeout = -1ULL;
     bool m_proxy = false;
     std::vector<IPAddr> m_bind_ips;
     IDialer* m_dialer = nullptr;
