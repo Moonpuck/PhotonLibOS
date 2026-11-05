@@ -186,6 +186,13 @@ public:
     void timeout_ms(uint64_t tmo) { timeout(tmo * 1000UL); }
     void timeout_s(uint64_t tmo) { timeout(tmo * 1000UL * 1000UL); }
 
+    // Max idle time in microseconds before a pooled connection is closed.
+    // -1UL (default) keeps idle connections until the peer closes them; 0 is
+    // treated as -1UL. Must be set before the first request; see
+    // new_http_client() for the per-std::thread sharing behaviour.
+    void set_max_idle_timeout(uint64_t timeout_us) { m_max_idle_timeout = timeout_us; }
+    uint64_t max_idle_timeout() const { return m_max_idle_timeout; }
+
     virtual ISocketStream* native_connect(std::string_view host, uint16_t port,
                                           bool secure = false, uint64_t timeout = -1UL) = 0;
 protected:
@@ -193,6 +200,7 @@ protected:
     std::string m_proxy_auth;
     std::string m_user_agent;
     uint64_t m_timeout = -1UL;
+    uint64_t m_max_idle_timeout = -1UL;
     bool m_proxy = false;
     std::vector<IPAddr> m_bind_ips;
     Resolver* m_resolver = nullptr;
@@ -200,8 +208,10 @@ protected:
 };
 
 // Create an HTTP client. Without cookie_jar, "Set-Cookies" headers are ignored.
-// Note: HTTP clients within the same std::thread share TLS config and connection pool.
-// Use separate std::threads for different TLS configurations.
+// Note: HTTP clients within the same std::thread share TLS config and connection
+// pool, so the settings that shape them (TLSContext, bind addresses, max idle
+// timeout) are taken from the first client that sends a request. Use separate
+// std::threads for different configurations.
 Client* new_http_client(ICookieJar *cookie_jar = nullptr, TLSContext *tls_ctx = nullptr);
 
 ICookieJar* new_simple_cookie_jar();
